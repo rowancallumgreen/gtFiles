@@ -1,0 +1,172 @@
+---
+title: "gt basics"
+author: "RowanGreen"
+date: "25/05/2023"
+output: slidy_presentation
+---
+
+
+### Openning Packages
+
+```{r, eval=FALSE}
+library(gt)
+library(tidyverse)
+library(magrittr)
+library(RColorBrewer)
+```
+
+
+```{r, echo=FALSE,message=FALSE,warning=FALSE}
+library(gt)
+library(tidyverse)
+library(magrittr)
+library(RColorBrewer)
+#setwd("/Volumes/GoogleDrive/My Drive/PhD_Docs")
+ setwd("G:/My Drive/PhD_Docs")
+BigTable<-read_csv("R_code_files/GMET_Modelling/SplitSens_10000/SplitSens_updatemutS/OUTPUTSENS110523/OutputParallel/CombinedModels.csv")
+"PlosBioData.csv" %>% read_csv() -> raw_data
+raw_data%<>%subset(Experimentor=="RG"&External_Treatment=="Control"&Oxygen=="+"&genotype=="ancestor"&coculture=="n"&GlcMedia=="y")
+read_csv("R_code_files/GMET_Modelling/SplitSens_10000/SplitSens_updatemutS/OUTPUTSENS110523/OutputParallel/BasicDAMP.csv")->BASELINE
+```
+
+### `This is the data we are working with`
+
+```{r echo=FALSE, fig.cap="Slope for models A:K"}
+OG<-c(rep(NA,11))
+for(i in 1:11){
+  subset(BASELINE,model==LETTERS[i])->sub
+  lm(log(sub$mr)~log(sub$wt))->mod  
+  mod$coefficients[2]->OG[i]
+}
+
+
+BigTable%>%
+  group_by(Model)%>%
+  summarize(q25=quantile(Gradient,probs=0.25),
+            q50=quantile(Gradient,probs=0.5),
+            q75=quantile(Gradient,probs=0.75),
+            max=max(Gradient),
+            min=min(Gradient))%>%
+  as.data.frame()->summaryt
+summaryt$Slope<-OG
+ggplot(summaryt,aes(Model,q50,colour=Model,ymin=q25,ymax=q75))+
+  geom_hline(yintercept=0,lty=3)+
+  scale_shape_manual(values=c(rep(19,11),17))+ 
+  geom_errorbar(width=0.1,colour="black")+
+  geom_point(size=3,colour="black",shape=4)+
+  geom_point(size=4,aes(y=OG),alpha=0.8)+
+  theme_bw(base_size = 24)+
+  theme(legend.position="none")+
+  ylab("Slope")+
+  scale_colour_manual(values=c("red",brewer.pal(name="Dark2",n=8),
+                               brewer.pal("Paired",n=12)[c(1,2,6)],"black"),
+                      breaks=c( "A","B"    ,    "C"    ,  
+                                "D"  ,      "E"   ,     "F"     ,  
+                                "G"    ,    "H"     ,   "I"   ,  
+                                "J"   ,     "K"   ))
+
+```
+
+### Making a basic gt
+```{r }
+summaryt%>%select(c("Model"  , "Slope" ,"q25"   ,  "q75" ,  "max"  , "min" ))%>%
+  gt(rowname_col="Model")->gt1
+gt1
+
+```
+### Adding a title and formatting numbers
+```{r }
+gt1%>%
+  tab_header(title="Model Variations")%>%
+  fmt_number(decimals=3,columns=2:6)->gt2
+gt2
+
+
+```
+### Adding column groups
+```{r }
+gt2%>%
+  tab_spanner(label="Quartiles",columns=c("q25"   ,  "q75"))%>%
+  tab_spanner(label="Range",columns=c("max"  , "min"))->gt3
+gt3
+
+
+```
+### Highlighting by column value
+```{r }
+gt3%>%
+  tab_style(locations=cells_body(
+    
+    rows=Slope<(-0.5)
+  ),
+  style=list(cell_text(color="blue")))->gt4
+
+gt4
+
+```
+
+### Making a gt for model parameters
+
+```{r, echo=FALSE,message=FALSE,warning=FALSE}
+
+
+ParameterD<-read_csv("Parameters descriptions - UPDATED PARAMETERS!.csv")
+```
+
+```{r }
+ParameterD%>%
+  gt()%>%
+  tab_header(title=md("**Model Parameters**"),subtitle="As used in model A")%>%
+  fmt_scientific(
+    columns = Value,
+    decimals = 2
+  ) %>%
+  tab_options(heading.background.color = "lightblue")->gtp1
+gtp1
+```
+### Adding superscript
+
+```{r }
+library(stringr)
+
+gtp1%>%
+  text_transform(
+    locations = cells_body(
+      columns = c(Units),
+      rows = ParameterD$Units=="M^-1sec^-1"
+    ),
+    fn = function(x){
+      M<-"M"
+      sec<-"sec"
+      glue::glue("{M}<sup>{-1}</sup>{sec}<sup>{-1}</sup>")
+    }
+  )%>%
+  text_transform(
+    locations = cells_body(
+      columns = c(Units),
+      rows = ParameterD$Units=="sec^-1"
+    ),
+    fn = function(x){
+      sec<-"sec"
+      glue::glue("{sec}<sup>{-1}</sup>")
+    }
+  )->gtp2
+
+```
+
+### View superscript
+
+```{r }
+gtp2
+
+```
+### Finally: Column Widths
+```{r }
+gtp2%>% cols_width(
+    Parameter~ px(80),
+    Value ~ px(100),
+    Units ~ px(75),
+    everything() ~ px(250)
+  )
+
+```
